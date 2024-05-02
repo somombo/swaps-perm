@@ -25,8 +25,6 @@ private theorem list_prod_fin_cast_val (h : n = n') (ps : List (Fin n × Fin n))
 
 private theorem list_prod_fin_cast_val_append (h : n = n') (ps ps': List (Fin n × Fin n)) : h ▸ (ps ++ ps') =  (h ▸ ps) ++ (h ▸ ps') := by simp_all only [list_prod_fin_cast_val, List.map_append]
 
-private theorem list_prod_fin_cast_val_reverse {ps : List (Fin n × Fin n)} (h : n = n') : h ▸ (ps.reverse) = (h ▸ ps).reverse := by cases h; rfl
-
 end subst_lemmas
 
 
@@ -43,7 +41,9 @@ def swaps (a : Array α) : List (Fin a.size × Fin a.size) → Array α
     swaps (a.swap i j) (ijs.map (fun p => ⟨⟨p.1.1, this.symm ▸ p.1.2⟩, ⟨p.2.1, this.symm ▸ p.2.2⟩⟩))
 termination_by l => l.length
 
-@[simp] theorem swaps_zero_eq_swap : a.swaps [] = a := by simp [swaps]
+@[simp] theorem swaps_nil : a.swaps [] = a := by simp [swaps]
+theorem swaps_cons : a.swaps ((i, j) :: ijs) = (a.swap i j).swaps ((a.size_swap ..).symm ▸ ijs) := by simp only [swaps, list_prod_fin_cast_val]
+
 @[simp] theorem swaps_one_eq_swap : a.swaps [(i, j)] = a.swap i j := by simp [swaps]
 @[simp] theorem swaps_two_eq_swap_swap {i1 j1 i2 j2 : Fin a.size}: a.swaps [(i1, j1),(i2, j2)] = (a.swap i1 j1).swap (⟨i2.1, (a.size_swap _ _).symm ▸ i2.2⟩) ⟨j2.1, (a.size_swap _ _).symm ▸ j2.2⟩ :=  by simp [swaps]
 
@@ -58,67 +58,56 @@ theorem swaps_congr {n : Nat} (a1 a2 : Array α) (l : List (Fin n × Fin n)) (ha
   | (i, j) :: ijs => trans (size_swaps (a.swap i j) ..) (a.size_swap _ _)
 termination_by l => l.length
 
+theorem swaps_append_lit  {n n' : Nat} (a : Array α) (l : List (Fin n × Fin n)) (l' : List (Fin n' × Fin n')) (hn : n = a.size) (h : n' = n) (hn' : n' = (a.swaps (hn ▸ l)).size) : (a.swaps (hn ▸ l)).swaps (hn' ▸ l') = a.swaps ((hn ▸ l) ++ ((Trans.trans h hn) ▸ l')) := by
+  have hs_0 : n' = a.size := Trans.trans h hn
+  induction l generalizing a with
+  | nil =>
+    have : a.swaps (hn ▸ []) = a :=  by simp only [list_prod_fin_cast_val, List.map_nil, swaps]
+    have : (a.swaps (hn ▸ [])).swaps (hn' ▸ l') = a.swaps (hs_0 ▸ l') := by apply swaps_congr ; exact this
+    simp_all only [list_prod_fin_cast_val, List.map_nil, List.nil_append]
+  | cons c ijs ih => cases c with | mk i j =>
 
--- set_option trace.profiler true in
-attribute [simp] list_prod_fin_cast_val in -- required for termination proof
-theorem swaps_append (a : Array α) (l l': List (Fin a.size × Fin a.size)) : (a.swaps l).swaps (a.size_swaps.symm ▸ l') = a.swaps (l ++ l') :=
-  match l with
-  | [] => by
-    have : a.swaps [] = a :=  a.swaps_zero_eq_swap
-    have : (a.swaps []).swaps l' = a.swaps l' := congrArg (fun _ => swaps a l') this
-    simp_all only [List.nil_append]
-  | (i, j) :: ijs =>
-    have hs : (a.swap i j).size = a.size := a.size_swap _ _
-    have hs's: ((a.swap i j).swaps (hs.symm ▸ ijs)).size = (a.swap i j).size := (a.swap i j).size_swaps
-    have hss : ((a.swap i j).swaps (hs.symm ▸ ijs)).size = a.size := Trans.trans hs's hs
+    have hs : (a.swap (hn ▸ i) (hn ▸ j)).size = a.size := a.size_swap ..
+    have hn_1 : n = (a.swap (hn ▸ i) (hn ▸ j)).size := Trans.trans hn hs.symm
+    have hs's: ((a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs)).size = (a.swap (hn ▸ i) (hn ▸ j)).size := by simp only [size_swaps]
+    have hss : ((a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs)).size = a.size := Trans.trans hs's hs
+    have hn'_ : n' = ((a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs)).size := Trans.trans hs_0 hss.symm
+    have hn''__ : n' = (a.swap (hn ▸ i) (hn ▸ j)).size := Trans.trans h hn_1
 
-    have ih : ((a.swap i j).swaps (hs.symm ▸ ijs)).swaps (hs's.symm ▸ (hs.symm ▸ l')) = (a.swap i j).swaps ((hs.symm ▸ ijs) ++ (hs.symm ▸ l')) := by apply swaps_append (a.swap i j) (hs.symm ▸ ijs) (hs.symm ▸ l') -- TODO: using apply tactic to speed it up. But shouldnt otherwise be necessary
+    have : a.swaps (hn ▸ ((i, j) :: ijs)) = (a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs) := calc _
+      _ = a.swaps (((hn ▸ i, hn ▸ j) :: (hn ▸ ijs))) := by simp only [list_prod_fin_cast_val, List.map_cons, fin_cast_val]
+      _ = (a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs) := by simp only [swaps_cons, ←list_prod_fin_cast_val_comm]
 
-    have h_suff : ((a.swap i j).swaps (hs.symm ▸ ijs)).swaps (hss.symm ▸ l') = (a.swap i j).swaps (hs.symm ▸ (ijs ++ l')) :=
-      (list_prod_fin_cast_val_comm (hs.symm) (hs's.symm) (l')).symm
-      ▸ (list_prod_fin_cast_val_append hs.symm (ijs) (l')).symm
-      ▸ ih
+    calc (a.swaps (hn ▸ ((i, j) :: ijs))).swaps (hn' ▸ l')
+      _ = ((a.swap (hn ▸ i) (hn ▸ j)).swaps (hn_1 ▸ ijs)).swaps (hn'_ ▸ l') := by apply swaps_congr ; assumption
+      _ = (a.swap (hn ▸ i) (hn ▸ j)).swaps ((hn_1 ▸ ijs) ++ (hn''__ ▸ l')) := by apply ih (a.swap (hn ▸ i) (hn ▸ j)) ; assumption
+      _ = (a.swap (hn ▸ i) (hn ▸ j)).swaps (hs.symm ▸ ((hn ▸ ijs) ++ (hs_0 ▸ l'))) := by congr ; simp only [list_prod_fin_cast_val_append, ←list_prod_fin_cast_val_comm]
+      _ = a.swaps ((hn ▸ i, hn ▸ j) :: ((hn ▸ ijs) ++ (hs_0 ▸ l'))) :=  by simp only [swaps_cons]
+      _ = a.swaps ((hn ▸ ((i, j) :: ijs)) ++ (hs_0 ▸ l')) := by simp only [fin_cast_val, list_prod_fin_cast_val, List.map_cons, List.cons_append]
 
-    have : (a.swaps ((i, j) :: ijs)).swaps (a.size_swaps.symm ▸ l') = ((a.swap i j).swaps (hs.symm ▸ ijs)).swaps (hss.symm ▸ l') := by apply swaps_congr ; simp only [swaps, list_prod_fin_cast_val]
 
-    by simp_all only [list_prod_fin_cast_val, swaps, List.cons_append]
-  termination_by l.length
+theorem swaps_cancel_lit {a_size : Nat} (a : Array α) (l : List (Fin a_size × Fin a_size)) (h : a.size = a_size := by rfl) : a.swaps (h.symm ▸ (l ++ l.reverse)) = a := by
+  induction l generalizing a with
+  | nil => simp only [List.reverse_nil, List.append_nil, list_prod_fin_cast_val, List.map_nil, swaps]
+  | cons c cs ih =>
 
-set_option maxHeartbeats 5000000 in
-attribute [simp] list_prod_fin_cast_val in -- required for termination proof
-theorem swaps_cancel (a : Array α) (l : List (Fin a.size × Fin a.size)) : a.swaps (l ++ l.reverse) = a :=
-  match l with
-  | [] => by simp only [List.reverse_nil, List.append_nil, swaps]
+    have hs' : (a.swaps (h.symm ▸ [c])).size = a_size := trans a.size_swaps h
+    have hs'' : ((a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse))).size = (a.swaps (h.symm ▸ [c])).size := by rw [size_swaps]
+    have hs : ((a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse))).size = a_size :=  trans hs'' hs'
 
-  | c :: cs =>
+    have ih : (a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse)) = a.swaps (h.symm ▸ [c]) := ih (a.swaps (h.symm ▸[c])) hs'
 
-    have hs' : (a.swaps [c]).size = a.size := by rw [size_swaps] -- a.size_swaps
-
-    have hs'' : ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))).size = (a.swaps [c]).size := by rw [size_swaps] -- (a.swaps [c]).size_swaps
-    have hs : ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))).size = a.size :=  by simp only [size_swaps] -- hs''.symm ▸ hs'
-
-    have : ((a.swaps [c]).swaps ((hs'.symm ▸ cs) ++ (hs'.symm ▸ cs).reverse)) = (a.swaps [c]) := swaps_cancel (a.swaps [c]) (hs'.symm ▸ cs)
-    -- have : ((a.swaps [c]).swaps ((hs'.symm ▸ cs) ++ (hs'.symm ▸ cs).reverse)) = (a.swaps [c]) := by exact (swaps_cancel (a.swaps [c]) (hs'.symm ▸ cs))
-    -- have : ((a.swaps [c]).swaps ((hs'.symm ▸ cs) ++ (hs'.symm ▸ cs).reverse)) = (a.swaps [c]) := by /- show_term -/ apply swaps_cancel
-    -- have : ((a.swaps [c]).swaps ((hs'.symm ▸ cs) ++ (hs'.symm ▸ cs).reverse)) = (a.swaps [c]) := by  /- with_reducible -/ exact (swaps_cancel (a.swaps [c]) (hs'.symm ▸ cs))
-
-    have : ((a.swaps [c]).swaps ((hs'.symm ▸ cs) ++ (hs'.symm ▸ cs.reverse))) = (a.swaps [c]) := by rw [(list_prod_fin_cast_val_reverse hs'.symm)]; exact this -- (list_prod_fin_cast_val_reverse hs'.symm) ▸ this
-    have ih : ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))) = (a.swaps [c]) := by rw [(list_prod_fin_cast_val_append hs'.symm ..)]; exact this -- (list_prod_fin_cast_val_append hs'.symm .. ▸ this)
-
-    calc  a.swaps ((c :: cs) ++ (c :: cs).reverse)
-      _ = a.swaps (      [c] ++ (cs ++ cs.reverse ++ [c])     ) := by simp only [List.reverse_cons, List.cons_append, List.append_assoc, List.nil_append]
-      _ = (a.swaps [c]).swaps ( hs'.symm ▸ (cs ++ cs.reverse ++ [c]) ) := by apply Eq.symm ; apply swaps_append -- (swaps_append a [c] (cs ++ cs.reverse ++ [c])).symm
-      _ = (a.swaps [c]).swaps ( (hs'.symm ▸ (cs ++ cs.reverse)) ++ (hs'.symm ▸ [c]) ) := by simp only [list_prod_fin_cast_val, List.map_append]
-      _ = ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))).swaps  (hs''.symm ▸ hs'.symm ▸ [c]) := by apply Eq.symm ; apply swaps_append -- (swaps_append (a.swaps [c])  (hs'.symm ▸ (cs ++ cs.reverse)) (hs'.symm ▸ [c])).symm
-
-      -- _ = ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))).swaps  (hs.symm ▸ [c]) := by simp only [list_prod_fin_cast_val, List.map] -- FIXME: is slow appox. 6seconds
-      _ = ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))).swaps  (hs.symm ▸ [c]) := /- show_term by rw [(list_prod_fin_cast_val_comm hs'.symm hs''.symm [c])] --> FIXME: is slow appox. 9seconds -/ Eq.mpr (id (congrArg (fun _a => swaps (swaps (swaps a [c]) (Eq.symm hs' ▸ (cs ++ List.reverse cs))) (Eq.symm hs'' ▸ Eq.symm hs' ▸ [c]) = swaps (swaps (swaps a [c]) (Eq.symm hs' ▸ (cs ++ List.reverse cs))) _a) (list_prod_fin_cast_val_comm (Eq.symm hs') (Eq.symm hs'') [c]))) (Eq.refl (swaps (swaps (swaps a [c]) (Eq.symm hs' ▸ (cs ++ List.reverse cs))) (Eq.symm hs'' ▸ Eq.symm hs' ▸ [c])))-- FIXME: is appox. 3.5seconds
-
-      _ = (a.swaps [c]).swaps  (hs'.symm ▸ [c]) := swaps_congr ((a.swaps [c]).swaps (hs'.symm ▸ (cs ++ cs.reverse))) (a.swaps [c]) [c] (hs.symm) (hs'.symm) ih
-      _ = a.swaps ([c] ++ [c]) := by apply swaps_append -- swaps_append a [c] [c]
-      _ = a := swaps_two_id
-
-  termination_by l.length
+    calc a.swaps (h.symm ▸ ((c :: cs) ++ (c :: cs).reverse))
+      _ = a.swaps (h.symm ▸ ([c] ++ (cs ++ cs.reverse ++ [c]))) := by simp only [List.reverse_cons, List.cons_append, List.append_assoc, List.nil_append]
+      _ = a.swaps ((h.symm ▸ [c]) ++ (h.symm ▸ (cs ++ cs.reverse ++ [c]))) := by simp only [list_prod_fin_cast_val, List.map_append]
+      _ = (a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse ++ [c])) := by apply Eq.symm ; apply swaps_append_lit ; rfl
+      _ = (a.swaps (h.symm ▸ [c])).swaps ((hs'.symm ▸ (cs ++ cs.reverse)) ++ (hs'.symm ▸ [c])) := by simp only [list_prod_fin_cast_val, List.map_append]
+      _ = ((a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse))).swaps  (hs''.symm ▸ hs'.symm ▸ [c]) := by apply Eq.symm ; apply swaps_append_lit ; exact hs'
+      _ = ((a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse))).swaps  (hs.symm ▸ [c]) := by simp only [list_prod_fin_cast_val, List.map] -- by rw [(list_prod_fin_cast_val_comm hs'.symm hs''.symm [c])] -- FIXME: is a bit slow appox. 2-3seconds
+      _ = (a.swaps (h.symm ▸ [c])).swaps  (hs'.symm ▸ [c]) := swaps_congr ((a.swaps (h.symm ▸ [c])).swaps (hs'.symm ▸ (cs ++ cs.reverse))) (a.swaps (h.symm ▸ [c])) [c] (hs.symm) (hs'.symm) ih -- by apply swaps_congr ; exact ih
+      _ = a.swaps ((h.symm ▸ [c]) ++ (h.symm ▸ [c])) := by apply swaps_append_lit ; rfl
+      _ = a.swaps (h.symm ▸ ([c] ++ [c])) := by simp only [list_prod_fin_cast_val, List.map_append]
+      _ = a := by simp only [List.singleton_append, list_prod_fin_cast_val, List.map_cons, List.map_nil, swaps_two_id]
 
 
 @[simp] def Perm (a a' : Array α) := ∃ (l : List (Fin a.size × Fin a.size)), a' = a.swaps l
@@ -147,8 +136,8 @@ theorem symm (h : a1 ~ a2) : a2 ~ a1 :=
 
   have : a2.swaps ((h.symm ▸ a1.size_swaps) ▸ l.reverse) = a1 := calc
       _ = (a1.swaps l).swaps (a1.size_swaps ▸ l.reverse) := by apply swaps_congr ; assumption
-      _ = a1.swaps (l ++ l.reverse) := swaps_append a1 l l.reverse
-      _ = a1 := swaps_cancel a1 l
+      _ = a1.swaps (l ++ l.reverse) := by apply swaps_append_lit a1 l l.reverse <;> rfl
+      _ = a1 := by apply swaps_cancel_lit a1 l
 
   ⟨(h.symm ▸ a1.size_swaps) ▸ l.reverse, this.symm⟩
 
@@ -163,12 +152,9 @@ theorem trans (h1 : a1 ~ a2) (h2 : a2 ~ a3) : a1 ~ a3 :=
   have hs3 : a2.size = (a1.swaps l1).size := Trans.trans hs2 hs1
 
   have h3' : a3 = (a1.swaps l1).swaps ((Trans.trans hs2 hs1) ▸ l2) := h1' ▸ h2'
+  have : (a1.swaps l1).swaps (hs3 ▸ l2) = a1.swaps (l1 ++ (hs2 ▸ l2)) := swaps_append_lit a1 l1 l2 rfl hs2 hs3
 
-  have : (a1.swaps l1).swaps (hs3 ▸ l2) = a1.swaps (l1 ++ (hs2 ▸ l2)) := calc _
-    _ = (a1.swaps l1).swaps (a1.size_swaps.symm ▸ hs2 ▸ l2) := by simp only [←list_prod_fin_cast_val_comm]
-    _ = a1.swaps (l1 ++ (hs2 ▸ l2)) := a1.swaps_append l1 (hs2 ▸ l2)
-
-  have : a3 = a1.swaps (l1 ++ (hs2 ▸ l2)) := Trans.trans h3'  this
+  have : a3 = a1.swaps (l1 ++ (hs2 ▸ l2)) := Trans.trans h3' this
 
   ⟨l1 ++ (hs2 ▸ l2), this⟩
 
