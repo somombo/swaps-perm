@@ -9,7 +9,7 @@
   the License.
 -/
 
-import Std.Data.Array.Lemmas
+import Batteries.Data.Array.Lemmas
 
 section subst_lemmas
 
